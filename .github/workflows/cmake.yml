@@ -19,8 +19,8 @@ jobs:
         config:
         - os: ubuntu-latest
           generator: Unix Makefiles
-        - os: macos-11
-          generator: Xcode
+        #- os: macos-11
+        #  generator: Xcode
         - os: windows-2022
           generator: Visual Studio 17 2022
     steps:
@@ -59,4 +59,4 @@ jobs:
       # Build your program with the given configuration
       run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
 
-      
+
