@@ -1,0 +1,62 @@
+name: CMake
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Customize the CMake build type here (Release, Debug, RelWithDebInfo, etc.)
+  BUILD_TYPE: Release
+  CONAN_USER_HOME: ${{ github.workspace }}/conan-home/
+  CONAN_USER_HOME_SHORT: "${{ github.workspace }}/conan-home/short"
+jobs:
+  build:
+    name: Building ${{ matrix.config.os }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      matrix:
+        config:
+        - os: ubuntu-latest
+          generator: Unix Makefiles
+        - os: macos-11
+          generator: Xcode
+        - os: windows-2022
+          generator: Visual Studio 17 2022
+    steps:
+    - name: switch to gcc-11 on linux
+      if: ${{ matrix.config.os == 'ubuntu-latest' }}
+      run: |
+        sudo apt install gcc-11 g++-11
+        sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-11 100 --slave /usr/bin/g++ g++ /usr/bin/g++-11 --slave /usr/bin/gcov gcov /usr/bin/gcov-11
+        sudo update-alternatives --set gcc /usr/bin/gcc-11
+    - uses: actions/checkout@v2
+    - name: Setup Python
+      uses: actions/setup-python@v2.3.1
+      with:
+        cache: pip
+        #cache-dependency-path: # optional
+    - uses: BSFishy/pip-action@v1
+      with:
+        packages: conan
+    - name: Cache for .conan
+      id: cache-conan
+      uses: actions/cache@v2
+      env:
+        cache-name: cache-conan-modules
+      with:
+        path: ${{ env.CONAN_USER_HOME }}
+        key: host-${{ matrix.config.os }}-${{ hashFiles('requirements.txt') }}-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          host-3-${{ matrix.config.os }}-
+
+    - name: Configure CMake
+      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+      run: cmake -B ${{github.workspace}}/build -G"${{ matrix.config.generator }}" -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} -DCMAKE_CONFIGURATION_TYPES=${{ env.BUILD_TYPE }}
+
+    - name: Build
+      # Build your program with the given configuration
+      run: cmake --build ${{github.workspace}}/build --config ${{env.BUILD_TYPE}}
+
+      
