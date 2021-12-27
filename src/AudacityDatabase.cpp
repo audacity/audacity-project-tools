@@ -96,7 +96,7 @@ void AudacityDatabase::reopenReadonlyAsWritable()
     mReadOnly = false;
 }
 
-void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath)
+void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath, bool freelistCorrupt)
 {
     mDatabase = {};
     removeOldFiles();
@@ -128,7 +128,9 @@ void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath)
     // detail::windows::build_args()
 
     child c(
-        sqlite3Binary, args += { mProjectPath.string(), ".recover" },
+        sqlite3Binary,
+        args += { mProjectPath.string(),
+                  freelistCorrupt ? ".recover --freelist-corrupt" : ".recover" },
         std_out > out_stream, std_err > err_stream);
 
     std::string line;

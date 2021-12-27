@@ -31,6 +31,7 @@ DEFINE_bool(check_integrity, false, "Check AUP3 integrity");
 DEFINE_bool(compact, false, "Compact the project");
 
 DEFINE_bool(recover_db, false, "Try to recover the project database");
+DEFINE_bool(freelist_corrupt, false, "Works with -recover_db. Forces SQLite to consider the freelist to be corrupt.");
 DEFINE_bool(recover_project, false, "Try to recover the project database");
 
 DEFINE_bool(extract_clips, false, "Try to extract clips from the AUP3");
@@ -169,7 +170,7 @@ int main(int argc, char **argv)
 
         if (FLAGS_recover_db)
         {
-            projectDatabase.recoverDatabase(std::filesystem::u8path(argv[0]));
+            projectDatabase.recoverDatabase(std::filesystem::u8path(argv[0]), FLAGS_freelist_corrupt);
         }
 
         std::unique_ptr<AudacityProject> project;

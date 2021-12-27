@@ -17,7 +17,8 @@ public:
     explicit AudacityDatabase(const std::filesystem::path& path);
 
     void reopenReadonlyAsWritable();
-    void recoverDatabase(const std::filesystem::path& binaryPath);
+    void recoverDatabase(
+        const std::filesystem::path& binaryPath, bool freelistCorrupt);
 
     bool hasAutosave();
     void dropAutosave();

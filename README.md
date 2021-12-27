@@ -26,6 +26,7 @@ Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. 
 * `-check_integrity`: performs an integrity check on the database, effectively running `PRAGMA integrity_check;`
 * `-extract_project`: extracts the project structure as a text-based XML file from both `autosave` and `project` tables.
 * `-recover_db`: attempts to recover the database file using ".recover" command of the `sqlite3` binary. The database will be a correct Audacity project file, passing `-check_integrity`. However, internal consistency is left unchecked. This mode is a must for error code 11 failures.
+* `-freelist_corrupt`: forces `-recover_db` to consider the database freelist to be corrupt.
 * `-recover_project`: replaces all the missing blocks with silence. Helps to work with "error code 101" issues.
 * `-compact`: removes all the unused blocks and compacts the database.
 * `-extract_clips`: extract all the clips as mono wave files. Requires a project to be intact.
