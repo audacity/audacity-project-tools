@@ -159,3 +159,15 @@ target_link_libraries(audacity-project-tools
 )
 
 add_subdirectory(3party/sqlite3)
+
+install(TARGETS audacity-project-tools sqlite3_shell)
+
+set(CPACK_PACKAGE_NAME "audacity-project-tools")
+set(CPACK_PACKAGE_VENDOR "Audacity")
+set(CPACK_PACKAGE_VERSION_MAJOR 1)
+set(CPACK_PACKAGE_VERSION_MINOR 0)
+set(CPACK_PACKAGE_VERSION_PATCH 0)
+set(CPACK_GENERATOR ZIP)
+SET(CPACK_OUTPUT_FILE_PREFIX packages)
+
+include(CPack)
