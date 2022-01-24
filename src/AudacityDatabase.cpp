@@ -15,7 +15,7 @@
 #include <boost/filesystem.hpp>
 
 #include <fmt/format.h>
-#include "AudacityDatabase.h"
+#include <sqlite3.h>
 
 #include "WaveFile.h"
 
@@ -44,9 +44,11 @@ template<typename T> size_t readInt(const std::string& string, size_t offset, T&
 }
 }
 
-AudacityDatabase::AudacityDatabase(const std::filesystem::path& path)
+AudacityDatabase::AudacityDatabase(
+    const std::filesystem::path& path, RecoveryConfig recoveryConfig)
     : mProjectPath(path)
     , mWritablePath(path)
+    , mRecoveryConfig(std::move(recoveryConfig))
 {
     mWritablePath.replace_extension("recovered.aup3");
 
@@ -54,28 +56,69 @@ AudacityDatabase::AudacityDatabase(const std::filesystem::path& path)
                 std::filesystem::u8path(
                     fmt::format("{}_data", mProjectPath.stem().u8string()));
 
-    // This will trow on error
-    mDatabase = std::make_unique<SQLite::Database>(path.u8string());
+    auto constructorAction = [this](auto action, bool repeatAction) {
+        try
+        {
+            action();
+        }
+        catch (const SQLite::Exception& ex)
+        {
+            if (mRecoveryConfig.AllowRecoveryFromConstructor &&
+                ex.getErrorCode() == SQLITE_CORRUPT)
+            {
+                fmt::print("Database is badly broken. Running recovery...\n");
 
-    // Check if application_id is valid, but only log warning if it is not
-    const int64_t appId =
-        mDatabase->execAndGet("PRAGMA application_id;").getInt64();
+                if (mProjectVersion == 0)
+                    mProjectVersion = MaxSupportedVersion;
 
-    if (appId != AudacityProjectID)
-    {
-        fmt::print(
-            "Unexpected application_id pragma: {}. Is it really an Audacity project?\n",
-            appId);
-    }
+                recoverDatabase();
+                
+                mRecoveredInConstructor = true;
 
-    mProjectVersion = mDatabase->execAndGet("PRAGMA user_version;").getUInt();
+                if (repeatAction)
+                    action();
+            }
+            else
+                throw;
+        }
+        catch (const std::exception& ex)
+        {
+            throw;
+        }
+    };
 
-    fmt::print(
-        "Project requires Audacity {}.{}.{}\n", (mProjectVersion >> 24) & 0xFF,
-        (mProjectVersion >> 16) & 0xFF, (mProjectVersion >> 8) & 0xFF);
+    constructorAction(
+        [this]() {
+            mDatabase =
+                std::make_unique<SQLite::Database>(mProjectPath.u8string());
+        },
+        false);
 
-    if (mProjectVersion > MaxSupportedVersion)
-        throw std::runtime_error("Unsupported project version");
+    constructorAction(
+        [this]() {
+            // Check if application_id is valid, but only log warning if it is
+            // not
+            const int64_t appId =
+                mDatabase->execAndGet("PRAGMA application_id;").getInt64();
+
+            if (appId != AudacityProjectID)
+            {
+                fmt::print(
+                    "Unexpected application_id pragma: {}. Is it really an Audacity project?\n",
+                    appId);
+            }
+
+            mProjectVersion =
+                mDatabase->execAndGet("PRAGMA user_version;").getUInt();
+
+            fmt::print(
+                "Project requires Audacity {}.{}.{}\n",
+                (mProjectVersion >> 24) & 0xFF, (mProjectVersion >> 16) & 0xFF,
+                (mProjectVersion >> 8) & 0xFF);
+
+            if (mProjectVersion > MaxSupportedVersion)
+                throw std::runtime_error("Unsupported project version");
+        }, true);
 }
 
 void AudacityDatabase::reopenReadonlyAsWritable()
@@ -96,8 +139,11 @@ void AudacityDatabase::reopenReadonlyAsWritable()
     mReadOnly = false;
 }
 
-void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath, bool freelistCorrupt)
+void AudacityDatabase::recoverDatabase()
 {
+    if (mRecoveredInConstructor)
+        return;
+
     mDatabase = {};
     removeOldFiles();
 
@@ -116,7 +162,7 @@ void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath, 
     using namespace boost::process;
 
     std::vector<boost::filesystem::path> paths = boost::this_process::path();
-    paths.insert(paths.begin(), binaryPath.parent_path().generic_string());
+    paths.insert(paths.begin(), mRecoveryConfig.BinaryPath.parent_path().generic_string());
 
     ipstream out_stream;
     ipstream err_stream;
@@ -130,12 +176,13 @@ void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath, 
     child c(
         sqlite3Binary,
         args += { mProjectPath.string(),
-                  freelistCorrupt ? ".recover --freelist-corrupt" : ".recover" },
+                  mRecoveryConfig.FreelistCorrupt ? ".recover --freelist-corrupt" : ".recover" },
         std_out > out_stream, std_err > err_stream);
 
     std::string line;
 
     int64_t recoveredSampleBlocks = 0;
+    int64_t recoveredQueries = 0;
 
     while (out_stream && std::getline(out_stream, line) && !line.empty())
     {
@@ -206,7 +253,12 @@ void AudacityDatabase::recoverDatabase(const std::filesystem::path& binaryPath, 
         }
 
         recoveredDB->exec(line);
+        fmt::print(
+            "\rExecuting query #{} ({})...",
+            ++recoveredQueries, line.substr(0, 64));
     }
+
+    fmt::print("\r\n");
 
     c.wait();
 

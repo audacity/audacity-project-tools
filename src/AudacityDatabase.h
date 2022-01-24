@@ -11,14 +11,22 @@
 
 #include "SampleFormat.h"
 
+struct RecoveryConfig final
+{
+    const std::filesystem::path BinaryPath;
+
+    bool FreelistCorrupt;
+    bool AllowRecoveryFromConstructor;
+};
+
 class AudacityDatabase final
 {
 public:
-    explicit AudacityDatabase(const std::filesystem::path& path);
+    explicit AudacityDatabase(
+        const std::filesystem::path& path, RecoveryConfig recoveryConfig);
 
     void reopenReadonlyAsWritable();
-    void recoverDatabase(
-        const std::filesystem::path& binaryPath, bool freelistCorrupt);
+    void recoverDatabase();
 
     bool hasAutosave();
     void dropAutosave();
@@ -44,5 +52,8 @@ private:
 
     uint32_t mProjectVersion;
 
+    RecoveryConfig mRecoveryConfig;
+
     bool mReadOnly { true };
+    bool mRecoveredInConstructor { false };
 };

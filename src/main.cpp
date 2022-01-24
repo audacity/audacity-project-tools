@@ -137,7 +137,9 @@ int main(int argc, char **argv)
 
     try
     {
-        AudacityDatabase projectDatabase(projectPath);
+        AudacityDatabase projectDatabase(
+            projectPath, { std::filesystem::u8path(argv[0]),
+                           FLAGS_freelist_corrupt, FLAGS_recover_db });
 
         if (FLAGS_drop_autosave)
         {
@@ -170,7 +172,7 @@ int main(int argc, char **argv)
 
         if (FLAGS_recover_db)
         {
-            projectDatabase.recoverDatabase(std::filesystem::u8path(argv[0]), FLAGS_freelist_corrupt);
+            projectDatabase.recoverDatabase();
         }
 
         std::unique_ptr<AudacityProject> project;
