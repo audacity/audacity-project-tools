@@ -10,6 +10,7 @@
 #include <vector>
 #include <charconv>
 #include <locale>
+#include <algorithm>
 
 #include <boost/process.hpp>
 #include <boost/filesystem.hpp>
@@ -127,7 +128,7 @@ void AudacityDatabase::reopenReadonlyAsWritable()
         return;
 
     fmt::print(
-        "Reopening database in writable mode at path {}",
+        "Reopening database in writable mode as: {}\n",
         mWritablePath.string());
 
     removeOldFiles();
@@ -252,10 +253,31 @@ void AudacityDatabase::recoverDatabase()
             ++recoveredSampleBlocks;
         }
 
-        recoveredDB->exec(line);
+        line.erase(
+            std::find_if(
+                line.rbegin(), line.rend(),
+                [](unsigned char ch) { return !std::isspace(ch); })
+                .base(),
+            line.end());
+
         fmt::print(
-            "\rExecuting query #{} ({})...",
-            ++recoveredQueries, line.substr(0, 64));
+            "\rExecuting query #{} ({})...", ++recoveredQueries,
+            line.substr(0, std::min<size_t>(line.length(), 80)));
+
+        try
+        {
+            recoveredDB->exec(line);
+        }
+        catch(const SQLite::Exception& ex)
+        {
+            fmt::print(
+                "\rError {} has occurred while precessing query #{}: {}. Query ignored.\n",
+                ex.getErrorCode(), recoveredQueries - 1, ex.getErrorStr());
+
+            fmt::print(
+                "Query: {}\n.",
+                line.substr(0, std::min<size_t>(line.length(), 256)));
+        }
     }
 
     fmt::print("\r\n");
