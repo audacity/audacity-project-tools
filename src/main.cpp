@@ -27,6 +27,7 @@
 DEFINE_bool(drop_autosave, false, "Drop autosave table, if exists");
 DEFINE_bool(extract_project, false, "Extract Audacity project as an XML file");
 DEFINE_bool(check_integrity, false, "Check AUP3 integrity");
+DEFINE_bool(analyze_project, false, "Print project statistics");
 
 DEFINE_bool(compact, false, "Compact the project");
 
@@ -193,6 +194,14 @@ int main(int argc, char **argv)
             project->removeUnusedBlocks();
         }
 
+        if (FLAGS_analyze_project)
+        {
+            if (project == nullptr)
+                project = std::make_unique<AudacityProject>(projectDatabase);
+
+            project->printProjectStatistics();
+        }
+
         if (FLAGS_extract_clips)
         {
             if (project == nullptr)
@@ -218,6 +227,11 @@ int main(int argc, char **argv)
             projectDatabase.extractTrack(
                 SampleFormatFromString(FLAGS_sample_format), FLAGS_sample_rate, true);
         }
+    }
+    catch (const fmt::format_error& err)
+    {
+        fmt::print("{}\n", err.what());
+        return -1;
     }
     catch (const std::exception& ex)
     {

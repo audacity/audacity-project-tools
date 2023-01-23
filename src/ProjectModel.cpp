@@ -226,6 +226,11 @@ int WaveTrack::getSampleRate() const
     return mRate;
 }
 
+const std::vector<Clip*>& WaveTrack::getClips() const
+{
+    return mClips;
+}
+
 AudacityProject::AudacityProject(AudacityDatabase& db)
     : mDb(db)
 {
@@ -468,6 +473,109 @@ void AudacityProject::extractClips() const
 
         waveFile.writeFile();
     }
+}
+
+namespace
+{
+std::string FormatTime(double seconds)
+{
+    if (seconds < 0)
+        return fmt::format("{}", seconds);
+
+    if (seconds > 60 * 60)
+        return fmt::format(
+            "{:02}:{:02}:{:02}.{:03}", (int)seconds / 3600, (int)seconds / 60 % 60,
+            (int)seconds % 60, (int)(seconds * 1000) % 1000);
+    else if (seconds > 60)
+        return fmt::format(
+            "{:02}:{:02}.{:03}", (int)seconds / 60, (int)seconds % 60,
+            (int)(seconds * 1000) % 1000);
+    else
+        return fmt::format(
+            "{:02}.{:03}", (int)seconds, (int)(seconds * 1000) % 1000);
+}
+
+struct BlockStatistics final
+{
+    size_t totalUsageCount {};
+    size_t audibleUsageCount {};
+};
+}
+
+void AudacityProject::printProjectStatistics() const
+{
+    std::unordered_map<int64_t, BlockStatistics> blocksStatistics;
+
+    for (const auto& track : mWaveTracks)
+    {
+        fmt::print(
+            "Track {}: {}\n", track.getParentIndex(), track.getTrackName());
+
+        for (auto clip : track.getClips())
+        {
+            const int64_t firstSample =
+                int64_t((clip->getTrimLeft()) * track.getSampleRate());
+
+            const int64_t lastSampleOffset =
+                int64_t(clip->getTrimRight() * track.getSampleRate());
+
+            size_t numSamples = 0;
+
+            for (auto sequence : *clip)
+            {
+                numSamples += sequence->getNumSamples();
+
+                const int64_t lastSample = sequence->getNumSamples() - lastSampleOffset;
+
+                for (const auto& block : *sequence)
+                {
+                    auto& blockStats = blocksStatistics[block->getBlockId()];
+
+                    ++blockStats.totalUsageCount;
+
+                    if ((block->getStart() + block->getLength()) >= firstSample &&
+                        block->getStart() < lastSample)
+                        ++blockStats.audibleUsageCount;
+                }
+            }
+
+            const double totalClipTime =
+                double(numSamples) / track.getSampleRate();
+
+            const double trimmedClipTime =
+                totalClipTime - clip->getTrimLeft() - clip->getTrimRight();
+            
+            fmt::print(
+                "\tClip {}: '{}'.\n\t\tTotal samples {}\n\t\tTotal time: {}\n\t\tTrimmed time: {}\n\t\tTrimmed / Total: {:.4f}%\n",
+                clip->getParentIndex(), clip->getName(), numSamples,
+                FormatTime(totalClipTime), FormatTime(trimmedClipTime),
+                trimmedClipTime / totalClipTime * 100.0);
+        }
+    }
+
+    const auto silentBlocksCount = std::count_if(
+        blocksStatistics.begin(), blocksStatistics.end(),
+        [](const auto& p) { return p.second.audibleUsageCount == 0; });
+
+    const auto unsharedBlocksCount = std::count_if(
+        blocksStatistics.begin(), blocksStatistics.end(),
+        [](const auto& p) { return p.second.totalUsageCount == 1; });
+
+    const auto unsharedSilentBlocks = std::count_if(
+        blocksStatistics.begin(), blocksStatistics.end(),
+        [](const auto& p) {
+            return p.second.audibleUsageCount == 0 &&
+                   p.second.totalUsageCount == 1;
+        });
+
+    fmt::print(
+        "Total blocks in project: {}\n\tSilent blocks count: {} ({:02.5}%)\nNot shared blocks count: {} ({:02.5}%)\n\tSilent blocks count: {} ({:02.5}%)\n",
+        blocksStatistics.size(), silentBlocksCount,
+        double(silentBlocksCount) / blocksStatistics.size() * 100.0,
+        unsharedBlocksCount,
+        double(unsharedBlocksCount) / blocksStatistics.size() * 100.0,
+        unsharedSilentBlocks,
+        double(unsharedSilentBlocks) / unsharedBlocksCount * 100.0);
 }
 
 std::string_view AudacityProject::CacheString(std::string_view view, bool reuse)

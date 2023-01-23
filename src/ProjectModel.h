@@ -144,6 +144,8 @@ public:
     int getSampleFormat() const;
     int getSampleRate() const;
 
+    const std::vector<Clip*>& getClips() const;
+
 private:
     size_t mParentIndex;
 
@@ -174,6 +176,9 @@ public:
     void removeUnusedBlocks();
 
     void extractClips() const;
+
+    void printProjectStatistics() const;
+
 private:
     std::string_view CacheString(std::string_view view, bool reuse);
 
