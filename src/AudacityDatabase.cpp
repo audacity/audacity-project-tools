@@ -177,7 +177,7 @@ void AudacityDatabase::recoverDatabase()
     child c(
         sqlite3Binary,
         args += { mProjectPath.string(),
-                  mRecoveryConfig.FreelistCorrupt ? ".recover --freelist-corrupt" : ".recover" },
+                  mRecoveryConfig.FreelistCorrupt ? ".recover --ignore-freelist" : ".recover" },
         std_out > out_stream, std_err > err_stream);
 
     std::string line;
