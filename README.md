@@ -33,6 +33,7 @@ Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. 
 * `-extract_sample_blocks`: extract sample blocks as separate wav files. It can be used if the project table is corrupted.
 * `-extract_as_mono_track`: extract sample blocks as a single mono wav file.
 * `-extract_as_stereo_track`: extract sample blocks as a single stereo wav file. Channels are based on the parity of the block_id.
+* `-analyze_project`: prints information about tracks and clips in the project.
 
 `audacity-project-tools` will never modify the original file. If mode requires the modification of the database, the tool will create a copy. All the output goes to the same directory as the project file has.
 
