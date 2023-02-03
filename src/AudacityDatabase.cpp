@@ -288,8 +288,12 @@ void AudacityDatabase::recoverDatabase()
 
     if (result != 0)
     {
-        throw std::runtime_error(
-            std::string(std::istreambuf_iterator<char>(err_stream), {}));
+        const auto errorMessge =
+            std::string(std::istreambuf_iterator<char>(err_stream), {});
+
+        fmt::print("sqlite3 has failed {}: {}\n", result, errorMessge);
+        
+        //throw std::runtime_error(errorMessge);
     }
 
     recoveredDB->exec(R"(
