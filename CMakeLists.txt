@@ -35,7 +35,7 @@ endif()
 set(DEPENDENCIES
     REQUIRES
         fmt/7.1.3
-        sqlite3/3.37.0
+        sqlite3/3.40.0
         sqlitecpp/3.1.1
         gflags/2.2.2
         utfcpp/3.2.1
