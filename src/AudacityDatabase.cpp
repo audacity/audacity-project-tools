@@ -25,7 +25,7 @@ namespace
 
 constexpr int64_t AudacityProjectID = 1096107097;
 constexpr int64_t MaxSupportedVersion =
-    (3 << 24) + (1 << 16) + (3 << 8) + 0; // 3.1.3.0
+    (3 << 24) + (3 << 16) + (0 << 8) + 0; // 3.3.0.0
 
 template<typename T> size_t readInt(const std::string& string, size_t offset, T& output)
 {
@@ -112,13 +112,23 @@ AudacityDatabase::AudacityDatabase(
             mProjectVersion =
                 mDatabase->execAndGet("PRAGMA user_version;").getUInt();
 
+            const auto majorVersion = (mProjectVersion >> 24) & 0xFF;
+            const auto minorVersion = (mProjectVersion >> 16) & 0xFF;
+            const auto patchVersion = (mProjectVersion >> 8) & 0xFF;
+
             fmt::print(
-                "Project requires Audacity {}.{}.{}\n",
-                (mProjectVersion >> 24) & 0xFF, (mProjectVersion >> 16) & 0xFF,
-                (mProjectVersion >> 8) & 0xFF);
+                "Project requires Audacity {}.{}.{}\n", majorVersion,
+                minorVersion, patchVersion);
+
+            if (majorVersion != 3)
+            {
+                fmt::print("user_version pragma appears to be broken...\n");
+                mProjectVersion = MaxSupportedVersion;
+            }
 
             if (mProjectVersion > MaxSupportedVersion)
-                throw std::runtime_error("Unsupported project version");
+                fmt::print(
+                    "DANGER!!! Unsupported Audacity version detected! Project data might be lost! Proceed with caution!\n");
         }, true);
 }
 

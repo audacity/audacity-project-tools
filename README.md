@@ -48,4 +48,4 @@ $ ls
 
 `audacity-project-tools` requires a C++17 compliant compiler with the complete C++17 library. The build requires <filesystem> and floating-point versions of `from_chars`.
 
-CMake and Conan are required to configure the project.
+CMake and Conan are required to configure the project. Conan 2.0 is not supported ATM.
