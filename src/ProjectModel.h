@@ -54,6 +54,9 @@ public:
     bool isSilence() const noexcept;
     void convertToSilence() noexcept;
 
+    void setBlockId(int64_t blockId) noexcept;
+    void setStart(int64_t start) noexcept;
+
     int64_t getBlockId() const noexcept;
     int64_t getStart() const noexcept;
     int64_t getLength() const noexcept;
@@ -167,9 +170,22 @@ public:
     AudacityProject(AudacityDatabase& db);
     ~AudacityProject();
 
+    bool containsBlock(int64_t blockId) const;
+
+    enum class BlockValidationResult
+    {
+        Ok,
+        Missing,
+        Invalid
+    };
+
+    int getRealBlockLength(const WaveBlock& block) const;
+
+    BlockValidationResult validateBlock(const WaveBlock& block) const;
+
     std::set<int64_t> validateBlocks() const;
 
-    std::set<int64_t> fixupMissingBlocks();
+    std::set<int64_t> recoverProject();
 
     void saveProject();
 

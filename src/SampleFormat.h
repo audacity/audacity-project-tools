@@ -18,3 +18,4 @@ enum class SampleFormat
 SampleFormat SampleFormatFromString(std::string_view format);
 
 uint32_t BytesPerSample(SampleFormat format);
+uint32_t DiskBytesPerSample(SampleFormat format);

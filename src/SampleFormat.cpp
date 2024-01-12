@@ -34,3 +34,18 @@ uint32_t BytesPerSample(SampleFormat format)
         throw std::runtime_error(fmt::format("Unsupported format {}", format));
     }
 }
+
+uint32_t DiskBytesPerSample(SampleFormat format)
+{
+    switch (format)
+    {
+    case SampleFormat::Int16:
+        return 2;
+    case SampleFormat::Int24:
+        return 4;
+    case SampleFormat::Float32:
+        return 4;
+    default:
+        throw std::runtime_error(fmt::format("Unsupported format {}", format));
+    }
+}

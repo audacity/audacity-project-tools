@@ -183,7 +183,7 @@ int main(int argc, char **argv)
             if (project == nullptr)
                 project = std::make_unique<AudacityProject>(projectDatabase);
 
-            project->fixupMissingBlocks();
+            project->recoverProject();
         }
 
         if (FLAGS_compact)

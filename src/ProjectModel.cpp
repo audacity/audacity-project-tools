@@ -48,6 +48,20 @@ void WaveBlock::convertToSilence() noexcept
     mXMLNode->setAttribute("badblock", true);
 }
 
+void WaveBlock::setBlockId(int64_t blockId) noexcept
+{
+    mBlockId = blockId;
+    mXMLNode->setAttribute("blockid", mBlockId);
+    mXMLNode->setAttribute("badblock", true);
+}
+
+void WaveBlock::setStart(int64_t start) noexcept
+{
+    mStart = start;
+    mXMLNode->setAttribute("start", mStart);
+    mXMLNode->setAttribute("badblock", true);
+}
+
 int64_t WaveBlock::getBlockId() const noexcept
 {
     return mBlockId;
@@ -250,6 +264,66 @@ AudacityProject::~AudacityProject()
 {
 }
 
+bool AudacityProject::containsBlock(int64_t blockId) const
+{
+    SQLite::Statement query(
+        mDb.DB(), "SELECT 1 FROM sampleblocks WHERE blockid = ?1;");
+
+    query.bind(1, blockId);
+
+    while (query.executeStep())
+        return true;
+
+    return false;
+}
+
+int AudacityProject::getRealBlockLength(const WaveBlock& block) const
+{
+    if (block.getBlockId() < 0)
+        return -block.getBlockId();
+
+    SQLite::Statement query (
+        mDb.DB(), "SELECT sampleformat, samples FROM sampleblocks WHERE blockid = ?1;");
+
+    query.bind(1, block.getBlockId());
+
+    while (query.executeStep ())
+    {
+        const int format = query.getColumn(0).getInt();
+        const int64_t blobSize = query.getColumn(1).getBytes();
+
+        if (format != block.getParent()->getFormat())
+            throw std::runtime_error (
+                fmt::format("Unexpected sample format for block {}",
+                                   block.getBlockId()));
+
+        return blobSize / BytesPerSample(static_cast<SampleFormat>(format));
+    }
+
+    throw std::runtime_error (
+        fmt::format("Block {} not found in the database", block.getBlockId()));
+}
+
+AudacityProject::BlockValidationResult
+AudacityProject::validateBlock(const WaveBlock& block) const
+{
+    // Creating query every time is slower,
+    // but can withstand error
+    SQLite::Statement query(
+        mDb.DB(), "SELECT sampleformat FROM sampleblocks WHERE blockid = ?1;");
+
+    query.bind(1, block.getBlockId());
+
+    while (query.executeStep())
+    {
+        const int format = query.getColumn(0).getInt();
+
+        return block.getParent()->getFormat() == format ? BlockValidationResult::Ok : BlockValidationResult::Invalid;
+    }
+
+    return BlockValidationResult::Missing;
+}
+
 std::set<int64_t> AudacityProject::validateBlocks() const
 {
     std::set<int64_t> missingBlocks;
@@ -262,51 +336,106 @@ std::set<int64_t> AudacityProject::validateBlocks() const
         if (missingBlocks.count(block.getBlockId()))
             continue;
 
-        try
-        {
-            // Creating query every time is slower,
-            // but can withstand error
-            SQLite::Statement query(
-                mDb.DB(),
-                "SELECT sampleformat, summin, summax, sumrms, summary256, summary64k, samples FROM sampleblocks WHERE blockid = ?1;");
-
-            query.bind(1, block.getBlockId());
-
-            int rowsCount = 0;
-
-            while (query.executeStep())
-            {
-                const int format = query.getColumn(0).getInt();
-
-                if (block.getParent()->getFormat() != format)
-                    throw std::runtime_error(fmt::format("Format mismatch for block {}\n", block.getBlockId()));
-
-                ++rowsCount;
-            }
-
-            if (rowsCount == 0)
-                throw std::runtime_error("Block not found");
-        }
-        catch (const std::exception& ex)
+        if (auto result = validateBlock(block); result != BlockValidationResult::Ok)
         {
             missingBlocks.emplace(block.getBlockId());
-            fmt::print("Invalid block {}: {}\n", block.getBlockId(), ex.what());
-        }
 
+            if (result == BlockValidationResult::Invalid)
+                fmt::print("Wrong sample formate for block: {}\n", block.getBlockId());
+            else if (result == BlockValidationResult::Missing)
+                fmt::print("Missing block: {}\n", block.getBlockId());
+        }
     }
 
     return missingBlocks;
 }
 
-std::set<int64_t> AudacityProject::fixupMissingBlocks()
+std::set<int64_t> AudacityProject::recoverProject()
 {
     auto missingBlocks = validateBlocks();
 
-    for (auto& block : mWaveBlocks)
+    for (auto& sequence : mSequences)
     {
+        int nextBlockStart = 0;
+
+        bool firstBlock = true;
+
+        for (auto blockPtr : sequence)
+        {
+            if (firstBlock)
+            {
+                firstBlock = false;
+
+                if (blockPtr->getStart() != 0)
+                {
+                    fmt::print("Invalid block id for first block in sequence: {}\n", blockPtr->getBlockId());
+                    blockPtr->setBlockId(0);
+                }
+
+                nextBlockStart += missingBlocks.count(blockPtr->getBlockId()) ?
+                                      blockPtr->getLength() :
+                                      getRealBlockLength(*blockPtr);
+
+                continue;
+            }
+
+            if (missingBlocks.count(blockPtr->getBlockId()))
+            {
+                // We can only hope that the block start is correct
+                nextBlockStart += blockPtr->getLength();
+            }
+            else
+            {
+                if (blockPtr->getStart() != nextBlockStart)
+                {
+                    fmt::print("Invalid block start for block: {}\n", blockPtr->getBlockId());
+                    blockPtr->setStart(nextBlockStart);
+                }
+
+                nextBlockStart += getRealBlockLength(*blockPtr);
+            }
+        }
+    }
+
+    const auto blocksCount = mWaveBlocks.size();
+
+    for (size_t index = 0; index < blocksCount; ++index)
+    {
+        auto& block = mWaveBlocks[index];
+
         if (missingBlocks.count(block.getBlockId()) == 0)
             continue;
 
+        if (index > 0 && (index + 1) < blocksCount)
+        {
+            auto& prevBlock = mWaveBlocks[index - 1];
+            auto& nextBlock = mWaveBlocks[index + 1];
+
+            if (prevBlock.getParent () == block.getParent () &&
+                nextBlock.getParent () == block.getParent ())
+            {
+                const auto prevBlockId = prevBlock.getBlockId();
+                const auto nextBlockId = nextBlock.getBlockId();
+
+                const auto diff = nextBlockId - prevBlockId;
+
+                if (prevBlockId > 0 && nextBlockId > 0 &&
+                    (diff == 2 || diff == 4))
+                {
+                    const auto potentialBlockId =
+                        (prevBlockId + nextBlockId) / 2;
+
+                    if (containsBlock(potentialBlockId))
+                    {
+                        fmt::print("Recovered block id: {} -> {}\n", block.getBlockId(), potentialBlockId);
+                        block.setBlockId(potentialBlockId);
+                        continue;
+                    }
+                }
+            }
+        }
+
+        fmt::print("Converting block to silence: start {}\n", block.getStart());
         block.convertToSilence();
     }
 
