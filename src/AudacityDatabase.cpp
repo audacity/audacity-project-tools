@@ -25,7 +25,7 @@ namespace
 
 constexpr int64_t AudacityProjectID = 1096107097;
 constexpr int64_t MaxSupportedVersion =
-    (3 << 24) + (3 << 16) + (0 << 8) + 0; // 3.3.0.0
+    (3 << 24) + (4 << 16) + (0 << 8) + 0; // 3.4.0.0
 
 template<typename T> size_t readInt(const std::string& string, size_t offset, T& output)
 {
