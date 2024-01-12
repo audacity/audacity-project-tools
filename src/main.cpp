@@ -50,8 +50,6 @@ DEFINE_string(
     "float",
     "Sample format for the extracted samples (-extract_sample_blocks, -extract_as_mono_track, -extract_as_stereo_track). Possible values are: int16, int24, float");
 
-constexpr int64_t AudacityProjectID = 1096107097;
-constexpr int64_t MaxSupportedVersion = (3 << 24) + (1 << 16) + (3 << 8) + 0; // 3.1.3.0
 
 namespace
 {
