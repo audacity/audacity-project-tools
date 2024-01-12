@@ -38,7 +38,7 @@ jobs:
         #cache-dependency-path: # optional
     - uses: BSFishy/pip-action@v1
       with:
-        packages: conan==1.59.0
+        packages: conan<2
     - name: Cache for .conan
       id: cache-conan
       uses: actions/cache@v2
