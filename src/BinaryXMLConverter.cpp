@@ -17,7 +17,7 @@ namespace
 
 enum class FieldTypes : uint8_t
 {
-    FT_CharSize, // type, ID, value
+    FT_CharSize, // type, value
     FT_StartTag, // type, ID
     FT_EndTag,   // type, ID
     FT_String,   // type, ID, string length, string
