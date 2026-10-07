@@ -17,6 +17,8 @@ On top of that, there were odd cases, like a half-written project blob.
 
 The Audacity 3/4 project structure is in a binary XML format. Schema is similar to the schema used by previous Audacity versions. After every user action project, Audacity serializes the project as a blob into the `autosave` table. When a user saves the project - Audacity removes the row from the `autosave` table and stores the project to the `project` table. Both tables use the same schema: there are two blobs. One contains "dictionary" data, a list of tag and attribute names; the second holds the project structure. During the startup Audacity checks if the `autosave` table contains any data. If it does, the application shows the dialog that allows the user to "recover" from the `autosave` or discard it.
 
+Since Audacity 4, every save preserves a snapshot of the current project document in the `project_history` table. It keeps the last 10 snapshots.
+
 Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. Each block stores around 5 seconds of mono audio data on the default settings. Audacity never updates blocks. Instead, Audacity creates new blocks when the data changes. For this reason, sample block IDs are not guaranteed to be monotonic or continuous inside a track. If the project structure itself is corrupted, there is no generic way to restore the data.
 
 ## Using the `audacity-project-tools`
@@ -29,11 +31,13 @@ Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. 
 * `-recover_db`: attempts to recover the database file using ".recover" command of the `sqlite3` binary. The database will be a correct Audacity project file, passing `-check_integrity`. However, internal consistency is left unchecked. This mode is a must for error code 11 failures.
 * `-freelist_corrupt`: forces `-recover_db` to consider the database freelist to be corrupt.
 * `-recover_project`: replaces all the missing blocks with silence. Helps to work with "error code 101" issues.
+* `-history=N`: Audacity 4 only: selects snapshot N from the `project_history` table instead of the `project` or `autosave` tables.
 * `-compact`: removes all the unused blocks and compacts the database.
 * `-extract_clips`: extract all the clips as mono wave files. Requires a project to be intact.
 * `-extract_sample_blocks`: extract sample blocks as separate wav files. It can be used if the project table is corrupted.
 * `-extract_as_mono_track`: extract sample blocks as a single mono wav file.
 * `-extract_as_stereo_track`: extract sample blocks as a single stereo wav file. Channels are based on the parity of the block_id.
+* `-sample_format` and `-sample_rate`: selects sample format (`int16`, `int24` or `float`, default `float`) and samplerate when is called with `-extract_sample_blocks`, `-extract_as_mono_track` and `-extract_as_stereo_track`.
 * `-analyze_project`: prints information about tracks and clips in the project.
 
 `audacity-project-tools` will never modify the original file. If mode requires the modification of the database, the tool will create a copy. All the output goes to the same directory as the project file has.
