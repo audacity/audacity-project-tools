@@ -26,6 +26,14 @@ namespace
 constexpr int64_t AudacityProjectID = 1096107097;
 constexpr int64_t MaxSupportedVersion =
     (4 << 24) + (0 << 16) + (0 << 8) + 1; // 4.0.0.1
+constexpr int64_t MaxSupportedAup3Version =
+    (3 << 24) + (7 << 16) + (0 << 8) + 0; // 3.7.0.0
+
+uint32_t DefaultProjectVersion(const std::filesystem::path& path)
+{
+    return path.extension() == ".aup3" ? MaxSupportedAup3Version :
+                                         MaxSupportedVersion;
+}
 
 template<typename T> size_t readInt(const std::string& string, size_t offset, T& output)
 {
@@ -72,7 +80,7 @@ AudacityDatabase::AudacityDatabase(
                 fmt::print("Database is badly broken. Running recovery...\n");
 
                 if (mProjectVersion == 0)
-                    mProjectVersion = MaxSupportedVersion;
+                    mProjectVersion = DefaultProjectVersion(mProjectPath);
 
                 recoverDatabase();
                 
@@ -124,8 +132,12 @@ AudacityDatabase::AudacityDatabase(
 
             if (majorVersion != 3 && majorVersion != 4)
             {
-                fmt::print("user_version pragma appears to be broken...\n");
-                mProjectVersion = MaxSupportedVersion;
+                mProjectVersion = DefaultProjectVersion(mProjectPath);
+
+                fmt::print(
+                    "user_version pragma appears to be broken, recovery will use {}.{}.{}.{}\n",
+                    mProjectVersion >> 24, (mProjectVersion >> 16) & 0xFF,
+                    (mProjectVersion >> 8) & 0xFF, mProjectVersion & 0xFF);
             }
 
             if (mProjectVersion > MaxSupportedVersion)

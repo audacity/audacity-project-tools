@@ -52,7 +52,7 @@ private:
     std::filesystem::path mWritablePath;
     std::filesystem::path mDataPath;
 
-    uint32_t mProjectVersion;
+    uint32_t mProjectVersion { 0 };
     int64_t mProjectApplicationId { 0 };
 
     RecoveryConfig mRecoveryConfig;
