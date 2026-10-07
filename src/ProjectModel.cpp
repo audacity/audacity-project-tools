@@ -832,9 +832,13 @@ void AudacityProject::HandleTagStart(std::string_view name, const AttributeList&
     }
     else if (name == "waveclip")
     {
+        const auto& parent = mParserState->DeserializedNodeStack.back();
+
+        // Nested clips are cut lines, they belong to the track of the enclosing clip
         mClips.emplace_back(
-            node, std::get<WaveTrack*>(
-                      mParserState->DeserializedNodeStack.back()));
+            node, std::holds_alternative<Clip*>(parent) ?
+                      std::get<Clip*>(parent)->getParent() :
+                      std::get<WaveTrack*>(parent));
 
         mParserState->DeserializedNodeStack.push_back(&mClips.back());
     }
