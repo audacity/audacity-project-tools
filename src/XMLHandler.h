@@ -14,7 +14,17 @@
 #include <fmt/format.h>
 #include <charconv>
 
-using AttributeValue = std::variant<bool, int32_t, uint32_t, int64_t, size_t, float, double, std::string_view, std::vector<uint8_t>>;
+// Binary XML encodings that carry more than a plain value, kept to write them back unchanged
+struct LongValue final { int32_t Value; };
+struct FloatValue final { float Value; int32_t Digits; };
+struct DoubleValue final { double Value; int32_t Digits; };
+
+using AttributeValue = std::variant<bool, int32_t, uint32_t, int64_t, size_t, float, double, std::string_view, std::vector<uint8_t>, LongValue, FloatValue, DoubleValue>;
+
+template<typename T>
+constexpr bool IsWrappedValue = std::is_same_v<T, LongValue> ||
+                                std::is_same_v<T, FloatValue> ||
+                                std::is_same_v<T, DoubleValue>;
 
 struct Attribute final
 {
@@ -39,7 +49,11 @@ void GetAttributeValue(const AttributeValue& attr, Ret& result)
         {
             using T = std::decay_t<decltype(arg)>;
 
-            if constexpr (std::is_same_v<Ret, std::string>)
+            if constexpr (IsWrappedValue<T>)
+            {
+                GetAttributeValue(AttributeValue { arg.Value }, result);
+            }
+            else if constexpr (std::is_same_v<Ret, std::string>)
             {
                 if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
                     result = fmt::format("(blob {} bytes)", arg.size());
@@ -101,4 +115,5 @@ public:
     virtual void HandleTagStart(std::string_view name, const AttributeList& attributes) = 0;
     virtual void HandleTagEnd(std::string_view name) = 0;
     virtual void HandleCharData(std::string_view data) = 0;
+    virtual void HandleRaw(std::string_view) {}
 };

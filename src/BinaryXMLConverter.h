@@ -9,6 +9,7 @@
 #include <utility>
 #include <string>
 #include <deque>
+#include <vector>
 
 #include "Buffer.h"
 #include "XMLHandler.h"
@@ -22,5 +23,7 @@ public:
     static std::unique_ptr<Buffer> ConvertToXML(const Buffer& buffer);
 
     static std::pair<std::unique_ptr<Buffer>, std::unique_ptr<Buffer>>
-    SerializeProject(const std::deque<std::string>& names, const ProjectTreeNode& project);
+    SerializeProject(
+        const std::deque<std::string>& names, const std::vector<std::string>& raw,
+        const ProjectTreeNode& project);
 };

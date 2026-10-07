@@ -133,27 +133,6 @@ public:
         return result;
     }
 
-    void skip(size_t bytes)
-    {
-        const auto targetOffset = mOffset + bytes;
-
-        if (targetOffset > mBufferSize)
-        {
-            throw std::overflow_error(fmt::format(
-                "Unable to skip {} bytes at offset {}", bytes, mOffset));
-        }
-
-        mOffset = targetOffset;
-    }
-
-    void skipString(bool useInt = false)
-    {
-        const auto bytesCount =
-            useInt ? read<uint32_t>() : uint32_t(read<uint16_t>());
-
-        skip(bytesCount);
-    }
-
     bool isEof() const noexcept
     {
         return mBufferSize == mOffset;
@@ -200,6 +179,8 @@ public:
 
                     if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
                         write(fmt::format("(blob {} bytes)", value.size()));
+                    else if constexpr (IsWrappedValue<T>)
+                        write(fmt::format("{}", value.Value));
                     else
                         write(fmt::format("{}", value));
                 },
@@ -394,6 +375,14 @@ public:
         mHandler.HandleCharData(CacheString(std::move(value)));
     }
 
+    void writeRaw(std::string value)
+    {
+        if (mInTag)
+            emitStartTag();
+
+        mHandler.HandleRaw(CacheString(std::move(value)));
+    }
+
 private:
     void emitStartTag()
     {
@@ -461,7 +450,7 @@ void BinaryXMLConverter::Parse(const Buffer& buffer, XMLHandler& handler)
             break;
         case FieldTypes::FT_Long:
             id = stream.read<uint16_t>();
-            helper.addAttr(lookup.get(id), stream.read<int32_t>());
+            helper.addAttr(lookup.get(id), LongValue { stream.read<int32_t>() });
             break;
         case FieldTypes::FT_LongLong:
             id = stream.read<uint16_t>();
@@ -472,15 +461,19 @@ void BinaryXMLConverter::Parse(const Buffer& buffer, XMLHandler& handler)
             helper.addAttr(lookup.get(id), stream.read<uint32_t>());
             break;
         case FieldTypes::FT_Float:
+        {
             id = stream.read<uint16_t>();
-            helper.addAttr(lookup.get(id), stream.read<float>());
-            stream.skip(sizeof(uint32_t));
+            const auto value = stream.read<float>();
+            helper.addAttr(lookup.get(id), FloatValue { value, stream.read<int32_t>() });
             break;
+        }
         case FieldTypes::FT_Double:
+        {
             id = stream.read<uint16_t>();
-            helper.addAttr(lookup.get(id), stream.read<double>());
-            stream.skip(sizeof(uint32_t));
+            const auto value = stream.read<double>();
+            helper.addAttr(lookup.get(id), DoubleValue { value, stream.read<int32_t>() });
             break;
+        }
         case FieldTypes::FT_Data:
             helper.writeData(stream.readString(true));
             break;
@@ -489,7 +482,7 @@ void BinaryXMLConverter::Parse(const Buffer& buffer, XMLHandler& handler)
             lookup.store(id, stream.readString());
             break;
         case FieldTypes::FT_Raw:
-            stream.skipString(true);
+            helper.writeRaw(stream.readString(true));
             break;
         case FieldTypes::FT_Blob:
             id = stream.read<uint16_t>();
@@ -579,6 +572,26 @@ void WriteNode(
                     buffer.append(uint32_t(value.length()));
                     buffer.append(value.data(), value.length());
                 }
+                else if constexpr (std::is_same_v<T, LongValue>)
+                {
+                    buffer.append(FieldTypes::FT_Long);
+                    buffer.append(attrNameIndex);
+                    buffer.append(value.Value);
+                }
+                else if constexpr (std::is_same_v<T, FloatValue>)
+                {
+                    buffer.append(FieldTypes::FT_Float);
+                    buffer.append(attrNameIndex);
+                    buffer.append(value.Value);
+                    buffer.append(value.Digits);
+                }
+                else if constexpr (std::is_same_v<T, DoubleValue>)
+                {
+                    buffer.append(FieldTypes::FT_Double);
+                    buffer.append(attrNameIndex);
+                    buffer.append(value.Value);
+                    buffer.append(value.Digits);
+                }
                 else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
                 {
                     buffer.append(FieldTypes::FT_Blob);
@@ -607,7 +620,8 @@ void WriteNode(
 
 std::pair<std::unique_ptr<Buffer>, std::unique_ptr<Buffer>>
 BinaryXMLConverter::SerializeProject(
-    const std::deque<std::string>& names, const ProjectTreeNode& project)
+    const std::deque<std::string>& names, const std::vector<std::string>& raw,
+    const ProjectTreeNode& project)
 {
     std::pair<std::unique_ptr<Buffer>, std::unique_ptr<Buffer>> result = {
         std::make_unique<Buffer>(), std::make_unique<Buffer>()
@@ -636,6 +650,13 @@ BinaryXMLConverter::SerializeProject(
 
         return uint16_t(std::distance(names.begin(), it));
     };
+
+    for (const auto& value : raw)
+    {
+        result.second->append(FieldTypes::FT_Raw);
+        result.second->append(uint32_t(value.length()));
+        result.second->append(value.data(), value.length());
+    }
 
     WriteNode(getStringIndex, *result.second, project);
 

@@ -201,12 +201,14 @@ private:
     void HandleTagStart(std::string_view name, const AttributeList& attributes) override;
     void HandleTagEnd(std::string_view name) override;
     void HandleCharData(std::string_view data) override;
+    void HandleRaw(std::string_view data) override;
 
     AudacityDatabase& mDb;
 
     std::unique_ptr<ProjectTreeNode> mProjectNode;
 
     std::deque<std::string> mReusableStringsCache;
+    std::vector<std::string> mRaw;
     std::deque<std::string> mStringCache;
 
     std::deque<WaveBlock> mWaveBlocks;

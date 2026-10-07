@@ -452,7 +452,7 @@ void AudacityProject::saveProject()
 {
     mDb.reopenReadonlyAsWritable();
 
-    auto result = BinaryXMLConverter::SerializeProject(mReusableStringsCache, *mProjectNode);
+    auto result = BinaryXMLConverter::SerializeProject(mReusableStringsCache, mRaw, *mProjectNode);
 
     SQLite::Statement query(
         mDb.DB(),
@@ -822,6 +822,11 @@ void AudacityProject::HandleTagEnd(std::string_view name)
 void AudacityProject::HandleCharData(std::string_view data)
 {
     mParserState->NodesStack.back()->Data = std::string(data);
+}
+
+void AudacityProject::HandleRaw(std::string_view data)
+{
+    mRaw.emplace_back(data);
 }
 
 void ProjectTreeNode::setAttribute(std::string_view name, AttributeValue value)
