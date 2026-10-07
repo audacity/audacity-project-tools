@@ -11,4 +11,4 @@
 
 #include "Buffer.h"
 
-std::unique_ptr<Buffer> ReadProjectBlob(SQLite::Database& db, const std::string& table);
+std::unique_ptr<Buffer> ReadProjectBlob(SQLite::Database& db, const std::string& table, int64_t rowId = 1);

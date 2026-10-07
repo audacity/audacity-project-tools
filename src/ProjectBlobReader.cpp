@@ -14,9 +14,9 @@ class SQLiteBlob final
 {
 public:
     SQLiteBlob(
-        SQLite::Database& db, const char* table, const char* column)
+        SQLite::Database& db, const char* table, const char* column, int64_t rowId)
     {
-        const int64_t rowId = db.execAndGet(fmt::format("SELECT ROWID FROM main.{} WHERE id = 1", table)).getInt64();
+        rowId = db.execAndGet(fmt::format("SELECT ROWID FROM main.{} WHERE ROWID = {}", table, rowId)).getInt64();
 
         const int rc = sqlite3_blob_open(
             db.getHandle(), "main", table, column, rowId, 0, &mBlob);
@@ -64,17 +64,17 @@ private:
 };
 
 std::unique_ptr<Buffer>
-ReadProjectBlob(SQLite::Database& db, const std::string& table)
+ReadProjectBlob(SQLite::Database& db, const std::string& table, int64_t rowId)
 {
     auto buffer = std::make_unique<Buffer>();
 
     {
-        SQLiteBlob dict(db, table.c_str(), "dict");
+        SQLiteBlob dict(db, table.c_str(), "dict", rowId);
         dict.readToBuffer(buffer.get());
     }
 
     {
-        SQLiteBlob project(db, table.c_str(), "doc");
+        SQLiteBlob project(db, table.c_str(), "doc", rowId);
         project.readToBuffer(buffer.get());
     }
 

@@ -167,7 +167,7 @@ private:
 class AudacityProject final : public XMLHandler
 {
 public:
-    AudacityProject(AudacityDatabase& db);
+    AudacityProject(AudacityDatabase& db, int64_t historySnapshot);
     ~AudacityProject();
 
     bool containsBlock(int64_t blockId) const;
@@ -220,4 +220,5 @@ private:
     std::unique_ptr<ParserState> mParserState;
 
     bool mFromAutosave;
+    bool mFromHistory;
 };

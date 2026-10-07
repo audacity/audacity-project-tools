@@ -37,6 +37,8 @@ DEFINE_bool(recover_db, false, "Try to recover the project database");
 DEFINE_bool(freelist_corrupt, false, "Works with -recover_db. Forces SQLite to consider the freelist to be corrupt.");
 DEFINE_bool(recover_project, false, "Try to recover the project database");
 
+DEFINE_int64(history, 0, "Use project document snapshot N from project_history instead of the project and autosave tables");
+
 DEFINE_bool(extract_clips, false, "Try to extract clips from the AUP3/AUP4");
 
 DEFINE_bool(
@@ -65,10 +67,11 @@ bool CanContinueInFailedState() noexcept
 }
 
 void ExtractProjectXML(
-    SQLite::Database& db, const std::string& table, const std::filesystem::path& projectPath)
+    SQLite::Database& db, const std::string& table, const std::filesystem::path& projectPath,
+    int64_t rowId = 1)
 {
     fmt::print("Reading project from table {}\n", table);
-    auto buffer = ReadProjectBlob(db, table);
+    auto buffer = ReadProjectBlob(db, table, rowId);
 
     auto xmlText = BinaryXMLConverter::ConvertToXML(*buffer);
 
@@ -121,11 +124,12 @@ private:
 };
 
 void ExtractProjectThumbnail(
-    SQLite::Database& db, const std::string& table, const std::filesystem::path& projectPath)
+    SQLite::Database& db, const std::string& table, const std::filesystem::path& projectPath,
+    int64_t rowId = 1)
 {
     fmt::print("Reading project thumbnail from table {}\n", table);
 
-    auto buffer = ReadProjectBlob(db, table);
+    auto buffer = ReadProjectBlob(db, table, rowId);
 
     ThumbnailExtractor extractor;
     BinaryXMLConverter::Parse(*buffer, extractor);
@@ -225,18 +229,34 @@ int main(int argc, char **argv)
 
         if (FLAGS_extract_project)
         {
-            if (projectDatabase.hasAutosave())
-                ExtractProjectXML(projectDatabase.DB(), "autosave", projectPath);
+            if (FLAGS_history > 0)
+            {
+                ExtractProjectXML(
+                    projectDatabase.DB(), "project_history", projectPath, FLAGS_history);
+            }
+            else
+            {
+                if (projectDatabase.hasAutosave())
+                    ExtractProjectXML(projectDatabase.DB(), "autosave", projectPath);
 
-            ExtractProjectXML(projectDatabase.DB(), "project", projectPath);
+                ExtractProjectXML(projectDatabase.DB(), "project", projectPath);
+            }
         }
 
         if (FLAGS_extract_thumbnail)
         {
-            if (projectDatabase.hasAutosave())
-                ExtractProjectThumbnail(projectDatabase.DB(), "autosave", projectPath);
+            if (FLAGS_history > 0)
+            {
+                ExtractProjectThumbnail(
+                    projectDatabase.DB(), "project_history", projectPath, FLAGS_history);
+            }
+            else
+            {
+                if (projectDatabase.hasAutosave())
+                    ExtractProjectThumbnail(projectDatabase.DB(), "autosave", projectPath);
 
-            ExtractProjectThumbnail(projectDatabase.DB(), "project", projectPath);
+                ExtractProjectThumbnail(projectDatabase.DB(), "project", projectPath);
+            }
         }
 
         if (FLAGS_recover_db)
@@ -249,7 +269,7 @@ int main(int argc, char **argv)
         if (FLAGS_recover_project)
         {
             if (project == nullptr)
-                project = std::make_unique<AudacityProject>(projectDatabase);
+                project = std::make_unique<AudacityProject>(projectDatabase, FLAGS_history);
 
             project->recoverProject();
         }
@@ -257,7 +277,7 @@ int main(int argc, char **argv)
         if (FLAGS_compact)
         {
             if (project == nullptr)
-                project = std::make_unique<AudacityProject>(projectDatabase);
+                project = std::make_unique<AudacityProject>(projectDatabase, FLAGS_history);
 
             project->removeUnusedBlocks();
         }
@@ -265,7 +285,7 @@ int main(int argc, char **argv)
         if (FLAGS_analyze_project)
         {
             if (project == nullptr)
-                project = std::make_unique<AudacityProject>(projectDatabase);
+                project = std::make_unique<AudacityProject>(projectDatabase, FLAGS_history);
 
             project->printProjectStatistics();
         }
@@ -273,7 +293,7 @@ int main(int argc, char **argv)
         if (FLAGS_extract_clips)
         {
             if (project == nullptr)
-                project = std::make_unique<AudacityProject>(projectDatabase);
+                project = std::make_unique<AudacityProject>(projectDatabase, FLAGS_history);
 
             project->extractClips();
         }

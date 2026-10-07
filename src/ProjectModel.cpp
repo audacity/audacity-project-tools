@@ -275,14 +275,16 @@ const std::vector<Clip*>& WaveTrack::getClips() const
     return mClips;
 }
 
-AudacityProject::AudacityProject(AudacityDatabase& db)
+AudacityProject::AudacityProject(AudacityDatabase& db, int64_t historySnapshot)
     : mDb(db)
 {
     mParserState = std::make_unique<ParserState>();
 
-    mFromAutosave = mDb.hasAutosave();
+    mFromHistory = historySnapshot > 0;
+    mFromAutosave = !mFromHistory && mDb.hasAutosave();
 
-    auto blob = mFromAutosave ? ReadProjectBlob(db.DB(), "autosave") :
+    auto blob = mFromHistory  ? ReadProjectBlob(db.DB(), "project_history", historySnapshot) :
+                mFromAutosave ? ReadProjectBlob(db.DB(), "autosave") :
                                 ReadProjectBlob(db.DB(), "project");
 
     BinaryXMLConverter::Parse(*blob, *this);
@@ -470,10 +472,11 @@ std::set<int64_t> AudacityProject::recoverProject()
     }
 
     if (!missingBlocks.empty())
-    {
         mReusableStringsCache.emplace_back("badblock");
+
+    // A document from history is restored as the project even if nothing was missing
+    if (!missingBlocks.empty() || mFromHistory)
         saveProject();
-    }
 
     return missingBlocks;
 }
@@ -523,8 +526,8 @@ void AudacityProject::removeUnusedBlocks()
         usedBlocks.emplace(block.getBlockId());
     }
 
-    // The saved project may still use blocks the autosave no longer does
-    if (mFromAutosave &&
+    // The saved project may still use blocks the loaded document no longer does
+    if ((mFromAutosave || mFromHistory) &&
         mDb.DB().execAndGet("SELECT COUNT(1) FROM project;").getInt() > 0)
     {
         BlockIdsCollector collector(usedBlocks);
