@@ -14,6 +14,36 @@
 
 #include "WaveFile.h"
 
+namespace
+{
+class BlockIdsCollector final : public XMLHandler
+{
+public:
+    explicit BlockIdsCollector(std::set<int64_t>& ids)
+        : mIds(ids)
+    {
+    }
+
+    void HandleTagStart(std::string_view name, const AttributeList& attributes) override
+    {
+        if (name != "waveblock")
+            return;
+
+        for (const auto& attr : attributes)
+        {
+            if (attr.Name == "blockid")
+                mIds.emplace(GetAttributeValue<int64_t>(attr.Value));
+        }
+    }
+
+    void HandleTagEnd(std::string_view) override {}
+    void HandleCharData(std::string_view) override {}
+
+private:
+    std::set<int64_t>& mIds;
+};
+}
+
 DeserializedNode::DeserializedNode(ProjectTreeNode* node)
     : mXMLNode(node)
 {
@@ -491,6 +521,14 @@ void AudacityProject::removeUnusedBlocks()
             continue;
 
         usedBlocks.emplace(block.getBlockId());
+    }
+
+    // The saved project may still use blocks the autosave no longer does
+    if (mFromAutosave &&
+        mDb.DB().execAndGet("SELECT COUNT(1) FROM project;").getInt() > 0)
+    {
+        BlockIdsCollector collector(usedBlocks);
+        BinaryXMLConverter::Parse(*ReadProjectBlob(mDb.DB(), "project"), collector);
     }
 
     std::set<int64_t> orphanedBlocks;
