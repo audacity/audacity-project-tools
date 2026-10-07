@@ -63,6 +63,10 @@ AudacityDatabase::AudacityDatabase(
         fmt::format("recovered{}", mProjectPath.extension().u8string());
     mWritablePath.replace_extension(std::filesystem::u8path(recoveredExtension));
 
+    mHadJournalFiles =
+        std::filesystem::exists(std::filesystem::u8path(mProjectPath.u8string() + "-wal")) ||
+        std::filesystem::exists(std::filesystem::u8path(mProjectPath.u8string() + "-shm"));
+
     mDataPath = mProjectPath.parent_path() /
                 std::filesystem::u8path(
                     fmt::format("{}_data", mProjectPath.stem().u8string()));
@@ -149,7 +153,13 @@ AudacityDatabase::AudacityDatabase(
 AudacityDatabase::~AudacityDatabase()
 {
     mDatabase.reset();
-    removeJournalFiles(mReadOnly ? mProjectPath : mWritablePath);
+
+    // Journal files that existed before may hold data that is not in the project file yet
+    if (!mHadJournalFiles)
+        removeJournalFiles(mProjectPath);
+
+    if (!mReadOnly)
+        removeJournalFiles(mWritablePath);
 }
 
 void AudacityDatabase::reopenReadonlyAsWritable()
@@ -164,6 +174,13 @@ void AudacityDatabase::reopenReadonlyAsWritable()
     removeOldFiles();
 
     std::filesystem::copy_file(mProjectPath, mWritablePath);
+
+    const auto walFile = std::filesystem::u8path(mProjectPath.u8string() + "-wal");
+
+    if (std::filesystem::exists(walFile))
+        std::filesystem::copy_file(
+            walFile, std::filesystem::u8path(mWritablePath.u8string() + "-wal"));
+
     mDatabase = std::make_unique<SQLite::Database>(
         mWritablePath.string(), SQLite::OPEN_READWRITE);
 
@@ -206,7 +223,7 @@ void AudacityDatabase::recoverDatabase()
 
     child c(
         sqlite3Binary,
-        args += { mProjectPath.string(),
+        args += { "-readonly", mProjectPath.string(),
                   mRecoveryConfig.FreelistCorrupt ? ".recover --ignore-freelist" : ".recover" },
         std_out > out_stream, std_err > err_stream);
 

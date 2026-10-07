@@ -58,5 +58,6 @@ private:
     RecoveryConfig mRecoveryConfig;
 
     bool mReadOnly { true };
+    bool mHadJournalFiles { false };
     bool mRecoveredInConstructor { false };
 };
