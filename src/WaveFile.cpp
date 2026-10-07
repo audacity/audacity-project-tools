@@ -97,15 +97,14 @@ void WaveFile::writeFile()
         [](const auto& lhs, const auto& rhs)
         { return lhs.getSize() < rhs.getSize(); });
 
-    const size_t dataSize = mNumChannels * it->getSize();
+    const auto maxSamples = it->getSize() / bytesPerSample;
+    const size_t dataSize = mNumChannels * maxSamples * bytesPerSample;
 
     header.ChunkSize += dataSize;
     header.Subchunk2Size = dataSize;
 
     if (sizeof(Header) != fwrite(&header, 1, sizeof(Header), file.get()))
         throw std::runtime_error("Failed to write WAV header");
-
-    const auto maxSamples = it->getSize() / bytesPerSample;
 
     std::vector<uint8_t> sampleData(mNumChannels * bytesPerSample);
 
