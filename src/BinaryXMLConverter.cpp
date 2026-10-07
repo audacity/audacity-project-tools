@@ -32,7 +32,8 @@ enum class FieldTypes : uint8_t
     FT_Raw,      // type, string length, string
     FT_Push,     // type only
     FT_Pop,      // type only
-    FT_Name      // type, ID, name length, name
+    FT_Name,     // type, ID, name length, name
+    FT_Blob      // type, ID, blob length, blob
 };
 
 class Stream final
@@ -69,7 +70,7 @@ public:
         const auto bytesCount =
             useInt ? read<uint32_t>() : uint32_t(read<uint16_t>());
 
-        mTempData.reserve(bytesCount);
+        mTempData.resize(bytesCount);
 
         if (bytesCount != mBuffer.read(mTempData.data(), mOffset, bytesCount))
         {
@@ -114,6 +115,22 @@ public:
         }
 
         throw std::runtime_error("Invalid char size");
+    }
+
+    std::vector<uint8_t> readBytes()
+    {
+        const auto bytesCount = read<uint32_t>();
+        std::vector<uint8_t> result(bytesCount);
+
+        if (bytesCount != 0 &&
+            bytesCount != mBuffer.read(result.data(), mOffset, bytesCount))
+        {
+            throw std::overflow_error(fmt::format(
+                "Unable to read {} bytes at offset {}", bytesCount, mOffset));
+        }
+
+        mOffset += bytesCount;
+        return result;
     }
 
     void skip(size_t bytes)
@@ -179,7 +196,12 @@ public:
 
             std::visit(
                 [this](auto&& value) {
-                    write(fmt::format("{}", value));
+                    using T = std::decay_t<decltype(value)>;
+
+                    if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+                        write(fmt::format("(blob {} bytes)", value.size()));
+                    else
+                        write(fmt::format("{}", value));
                 },
                 attr.Value);
 
@@ -352,6 +374,18 @@ public:
         mAttributes.emplace_back(name, value);
     }
 
+    void addBlobAttr(const std::string_view& name, std::vector<uint8_t> value)
+    {
+        if (!mInTag)
+        {
+            throw std::runtime_error(fmt::format(
+                "Attempt to write attribute {} outside of the tag context.",
+                name));
+        }
+
+        mAttributes.emplace_back(name, std::move(value));
+    }
+
     void writeData(std::string value)
     {
         if (mInTag)
@@ -457,6 +491,10 @@ void BinaryXMLConverter::Parse(const Buffer& buffer, XMLHandler& handler)
         case FieldTypes::FT_Raw:
             stream.skipString(true);
             break;
+        case FieldTypes::FT_Blob:
+            id = stream.read<uint16_t>();
+            helper.addBlobAttr(lookup.get(id), stream.readBytes());
+            break;
         default:
             throw std::runtime_error("Unsupported opcode");
         }
@@ -540,6 +578,13 @@ void WriteNode(
                     buffer.append(attrNameIndex);
                     buffer.append(uint32_t(value.length()));
                     buffer.append(value.data(), value.length());
+                }
+                else if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+                {
+                    buffer.append(FieldTypes::FT_Blob);
+                    buffer.append(attrNameIndex);
+                    buffer.append(uint32_t(value.size()));
+                    buffer.append(value.data(), value.size());
                 }
             },
             attr.Value);

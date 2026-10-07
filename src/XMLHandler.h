@@ -14,7 +14,7 @@
 #include <fmt/format.h>
 #include <charconv>
 
-using AttributeValue = std::variant<bool, int32_t, uint32_t, int64_t, size_t, float, double, std::string_view>;
+using AttributeValue = std::variant<bool, int32_t, uint32_t, int64_t, size_t, float, double, std::string_view, std::vector<uint8_t>>;
 
 struct Attribute final
 {
@@ -41,7 +41,10 @@ void GetAttributeValue(const AttributeValue& attr, Ret& result)
 
             if constexpr (std::is_same_v<Ret, std::string>)
             {
-                result = fmt::format("{}", arg);
+                if constexpr (std::is_same_v<T, std::vector<uint8_t>>)
+                    result = fmt::format("(blob {} bytes)", arg.size());
+                else
+                    result = fmt::format("{}", arg);
             }
             else if constexpr (std::is_same_v<Ret, T>)
             {

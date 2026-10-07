@@ -2,7 +2,7 @@
 
 `audacity-project-tools` is a utility application to work with corrupted Audacity projects. 
 
-Internally, the AUP3 file is an SQLite3 database. Such databases are complex binary files that can be corrupted in a few scenarios:
+Internally, AUP3 and AUP4 files are SQLite3 databases. Such databases are complex binary files that can be corrupted in a few scenarios:
 * OS file sync has failed internally;
 * Uncommitted WAL file is removed;
 * Hardware-level corruption.
@@ -15,7 +15,7 @@ On top of that, there were odd cases, like a half-written project blob.
 
 ## Audacity Project Internals
 
-The Audacity 3 project structure is in a binary XML format. Schema is similar to the schema used by previous Audacity versions. After every user action project, Audacity serializes the project as a blob into the `autosave` table. When a user saves the project - Audacity removes the row from the `autosave` table and stores the project to the `project` table. Both tables use the same schema: there are two blobs. One contains "dictionary" data, a list of tag and attribute names; the second holds the project structure. During the startup Audacity checks if the `autosave` table contains any data. If it does, the application shows the dialog that allows the user to "recover" from the `autosave` or discard it.
+The Audacity 3/4 project structure is in a binary XML format. Schema is similar to the schema used by previous Audacity versions. After every user action project, Audacity serializes the project as a blob into the `autosave` table. When a user saves the project - Audacity removes the row from the `autosave` table and stores the project to the `project` table. Both tables use the same schema: there are two blobs. One contains "dictionary" data, a list of tag and attribute names; the second holds the project structure. During the startup Audacity checks if the `autosave` table contains any data. If it does, the application shows the dialog that allows the user to "recover" from the `autosave` or discard it.
 
 Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. Each block stores around 5 seconds of mono audio data on the default settings. Audacity never updates blocks. Instead, Audacity creates new blocks when the data changes. For this reason, sample block IDs are not guaranteed to be monotonic or continuous inside a track. If the project structure itself is corrupted, there is no generic way to restore the data.
 
@@ -25,6 +25,7 @@ Audacity stores samples in blocks of up to 1Mb inside the `sampleblocks` table. 
 * `-drop_autosave`: removes an `autosave` table if any. The chances are that dropping this table can help recover a more consistent project.
 * `-check_integrity`: performs an integrity check on the database, effectively running `PRAGMA integrity_check;`
 * `-extract_project`: extracts the project structure as a text-based XML file from both `autosave` and `project` tables.
+* `-extract_thumbnail`: extracts an Audacity 4 project thumbnail PNG.
 * `-recover_db`: attempts to recover the database file using ".recover" command of the `sqlite3` binary. The database will be a correct Audacity project file, passing `-check_integrity`. However, internal consistency is left unchecked. This mode is a must for error code 11 failures.
 * `-freelist_corrupt`: forces `-recover_db` to consider the database freelist to be corrupt.
 * `-recover_project`: replaces all the missing blocks with silence. Helps to work with "error code 101" issues.

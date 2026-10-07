@@ -25,7 +25,7 @@ namespace
 
 constexpr int64_t AudacityProjectID = 1096107097;
 constexpr int64_t MaxSupportedVersion =
-    (3 << 24) + (7 << 16) + (0 << 8) + 0; // 3.7.0.0
+    (4 << 24) + (0 << 16) + (0 << 8) + 1; // 4.0.0.1
 
 template<typename T> size_t readInt(const std::string& string, size_t offset, T& output)
 {
@@ -51,7 +51,9 @@ AudacityDatabase::AudacityDatabase(
     , mWritablePath(path)
     , mRecoveryConfig(std::move(recoveryConfig))
 {
-    mWritablePath.replace_extension("recovered.aup3");
+    const auto recoveredExtension =
+        fmt::format("recovered{}", mProjectPath.extension().u8string());
+    mWritablePath.replace_extension(std::filesystem::u8path(recoveredExtension));
 
     mDataPath = mProjectPath.parent_path() /
                 std::filesystem::u8path(
@@ -99,14 +101,14 @@ AudacityDatabase::AudacityDatabase(
         [this]() {
             // Check if application_id is valid, but only log warning if it is
             // not
-            const int64_t appId =
+            mProjectApplicationId =
                 mDatabase->execAndGet("PRAGMA application_id;").getInt64();
 
-            if (appId != AudacityProjectID)
+            if (mProjectApplicationId != AudacityProjectID)
             {
                 fmt::print(
                     "Unexpected application_id pragma: {}. Is it really an Audacity project?\n",
-                    appId);
+                    mProjectApplicationId);
             }
 
             mProjectVersion =
@@ -120,7 +122,7 @@ AudacityDatabase::AudacityDatabase(
                 "Project requires Audacity {}.{}.{}\n", majorVersion,
                 minorVersion, patchVersion);
 
-            if (majorVersion != 3)
+            if (majorVersion != 3 && majorVersion != 4)
             {
                 fmt::print("user_version pragma appears to be broken...\n");
                 mProjectVersion = MaxSupportedVersion;
@@ -316,6 +318,11 @@ void AudacityDatabase::recoverDatabase()
     PRAGMA locking_mode = NORMAL;
     PRAGMA synchronous = NORMAL;)");
 
+    if (mProjectApplicationId != AudacityProjectID)
+        fmt::print(
+            "Changing application_id from {} to {}\n", mProjectApplicationId,
+            AudacityProjectID);
+
     recoveredDB->exec(fmt::format("PRAGMA application_id = {};", AudacityProjectID));
     recoveredDB->exec(fmt::format("PRAGMA user_version = {};", mProjectVersion));
 
@@ -474,14 +481,12 @@ void AudacityDatabase::extractTrack(
 
 void AudacityDatabase::removeJournalFiles(const std::filesystem::path& dbPath)
 {
-    auto walFile = dbPath;
-    walFile.replace_extension("aup3-wal");
+    auto walFile = std::filesystem::u8path(dbPath.u8string() + "-wal");
 
     if (std::filesystem::exists(walFile))
         std::filesystem::remove(walFile);
 
-    auto shmFile = dbPath;
-    shmFile.replace_extension("aup3-shm");
+    auto shmFile = std::filesystem::u8path(dbPath.u8string() + "-shm");
 
     if (std::filesystem::exists(shmFile))
         std::filesystem::remove(shmFile);

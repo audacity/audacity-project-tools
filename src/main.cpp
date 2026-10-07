@@ -8,6 +8,7 @@
 #include <fmt/format.h>
 
 #include <string_view>
+#include <vector>
 
 #include <filesystem>
 #include <fstream>
@@ -26,7 +27,8 @@
 
 DEFINE_bool(drop_autosave, false, "Drop autosave table, if exists");
 DEFINE_bool(extract_project, false, "Extract Audacity project as an XML file");
-DEFINE_bool(check_integrity, false, "Check AUP3 integrity");
+DEFINE_bool(extract_thumbnail, false, "Extract Audacity 4 project thumbnail as a PNG file");
+DEFINE_bool(check_integrity, false, "Check AUP3/AUP4 integrity");
 DEFINE_bool(analyze_project, false, "Print project statistics");
 
 DEFINE_bool(compact, false, "Compact the project");
@@ -35,7 +37,7 @@ DEFINE_bool(recover_db, false, "Try to recover the project database");
 DEFINE_bool(freelist_corrupt, false, "Works with -recover_db. Forces SQLite to consider the freelist to be corrupt.");
 DEFINE_bool(recover_project, false, "Try to recover the project database");
 
-DEFINE_bool(extract_clips, false, "Try to extract clips from the AUP3");
+DEFINE_bool(extract_clips, false, "Try to extract clips from the AUP3/AUP4");
 
 DEFINE_bool(
     extract_sample_blocks, false, "Try to extract individual sample blocks");
@@ -56,6 +58,7 @@ namespace
 bool CanContinueInFailedState() noexcept
 {
     return FLAGS_extract_project || FLAGS_recover_db || FLAGS_recover_project ||
+           FLAGS_extract_thumbnail ||
            FLAGS_extract_clips || FLAGS_extract_sample_blocks ||
            FLAGS_extract_as_mono_track ||
            FLAGS_extract_as_stereo_track;
@@ -88,6 +91,65 @@ void ExtractProjectXML(
         offset += bytesRead;
     }
 }
+
+class ThumbnailExtractor final : public XMLHandler
+{
+public:
+    void HandleTagStart(std::string_view name, const AttributeList& attributes) override
+    {
+        if (name != "thumbnail")
+            return;
+
+        for (const auto& attr : attributes)
+        {
+            if (attr.Name == "data" &&
+                std::holds_alternative<std::vector<uint8_t>>(attr.Value))
+            {
+                mData = std::get<std::vector<uint8_t>>(attr.Value);
+                return;
+            }
+        }
+    }
+
+    void HandleTagEnd(std::string_view) override {}
+    void HandleCharData(std::string_view) override {}
+
+    const std::vector<uint8_t>& data() const noexcept { return mData; }
+
+private:
+    std::vector<uint8_t> mData;
+};
+
+void ExtractProjectThumbnail(
+    SQLite::Database& db, const std::string& table, const std::filesystem::path& projectPath)
+{
+    fmt::print("Reading project thumbnail from table {}\n", table);
+
+    auto buffer = ReadProjectBlob(db, table);
+
+    ThumbnailExtractor extractor;
+    BinaryXMLConverter::Parse(*buffer, extractor);
+
+    if (extractor.data().empty())
+    {
+        fmt::print("Project has no thumbnail data.\n");
+        return;
+    }
+
+    const auto thumbnailPath =
+        projectPath.parent_path() /
+        std::filesystem::u8path(fmt::format(
+            "{}.{}.thumbnail.png", projectPath.filename().u8string(), table));
+
+    std::fstream thumbnailFile(
+        thumbnailPath, std::ios_base::out | std::ios_base::binary);
+
+    thumbnailFile.write(
+        reinterpret_cast<const char*>(extractor.data().data()),
+        extractor.data().size());
+
+    fmt::print("Saved thumbnail to {}\n", thumbnailPath.string());
+}
 } // namespace
 #ifdef _WIN32
 int wmain(int argc, wchar_t *wArgv[])
@@ -114,7 +176,7 @@ int main(int argc, char **argv)
     char** argv = utf8ArgsPtrs.data();
 #endif
 
-    gflags::SetUsageMessage("[mode] path.aup3");
+    gflags::SetUsageMessage("[mode] path.aup3|path.aup4");
 
     if (argc <= 1)
     {
@@ -167,6 +229,14 @@ int main(int argc, char **argv)
                 ExtractProjectXML(projectDatabase.DB(), "autosave", projectPath);
 
             ExtractProjectXML(projectDatabase.DB(), "project", projectPath);
+        }
+
+        if (FLAGS_extract_thumbnail)
+        {
+            if (projectDatabase.hasAutosave())
+                ExtractProjectThumbnail(projectDatabase.DB(), "autosave", projectPath);
+
+            ExtractProjectThumbnail(projectDatabase.DB(), "project", projectPath);
         }
 
         if (FLAGS_recover_db)

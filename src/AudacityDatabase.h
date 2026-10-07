@@ -53,6 +53,7 @@ private:
     std::filesystem::path mDataPath;
 
     uint32_t mProjectVersion;
+    int64_t mProjectApplicationId { 0 };
 
     RecoveryConfig mRecoveryConfig;
 
